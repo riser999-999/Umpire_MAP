@@ -3,6 +3,8 @@ export const DBV_ORG_ID = 1;
 export const RELEVANT_CLASSIFICATIONS = [
   "1. Bundesliga",
   "2. Bundesliga",
+  "DBL Interleague",
+  "DBL Wild Card Race",
   "Playoffs",
   "Playdowns",
 ];
