@@ -63,8 +63,8 @@ export async function discoverLeagues(): Promise<{ id: string; name: string; url
     console.error("BSM_API_KEY is not set!");
     return [];
   }
-  //const url = `https://bsm.baseball-softball.de/organizations/${DBV_ORG_ID}/league_groups.json?api_key=${API_KEY}`;
-  const url = `https://bsm.baseball-softball.de/organizations/${DBV_ORG_ID}/league_groups.json?compact=true`;
+  const url = `https://bsm.baseball-softball.de/organizations/${DBV_ORG_ID}/league_groups.json?api_key=${API_KEY}`;
+  //const url = `https://bsm.baseball-softball.de/organizations/${DBV_ORG_ID}/league_groups.json?compact=true`;
   const res = await fetch(url, { next: { revalidate: 3600 } });
   if (!res.ok) {
     console.error(`league_groups API returned ${res.status}`);
