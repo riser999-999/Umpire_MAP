@@ -91,7 +91,7 @@ export default function MatchPopup({ fieldName, fieldAddress, matches }: Props) 
               {match.umpire_assignments.map((ua, i) => (
                 <div key={i} style={{ fontSize: "11px", color: "#94a3b8", lineHeight: "1.6" }}>
                   <span style={{ color: "#64748b" }}>{positionLabel(ua.assignment_type)}:</span>{" "}
-                  {ua.license.person.first_name} {ua.license.person.last_name}
+                  {ua.license.person.first_name} {ua.license.person.last_name.charAt(0)}.
                   {ua.crew_chief && (
                     <span style={{ marginLeft: "4px", color: "#fbbf24", fontSize: "10px" }}>CC</span>
                   )}
