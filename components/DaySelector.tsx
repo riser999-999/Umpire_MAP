@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useRef } from "react";
 import { parseDate } from "../lib/bsm";
 
 interface Props {
@@ -9,6 +9,12 @@ interface Props {
 }
 
 export default function DaySelector({ days, selectedDay, matchCountByDay, onSelect }: Props) {
+  const activeButtonRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    activeButtonRef.current?.scrollIntoView({ block: "nearest", inline: "center" });
+  }, [selectedDay]);
+
   function formatDayLabel(dateStr: string): string {
     return parseDate(dateStr).toLocaleDateString("de-DE", {
       weekday: "short",
@@ -34,6 +40,7 @@ export default function DaySelector({ days, selectedDay, matchCountByDay, onSele
         return (
           <button
             key={day}
+            ref={isActive ? activeButtonRef : undefined}
             onClick={() => onSelect(day)}
             style={{
               flexShrink: 0,
