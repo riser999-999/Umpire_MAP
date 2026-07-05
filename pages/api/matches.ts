@@ -3,6 +3,12 @@ import { discoverLeagues, fetchLeagueMatches } from "../../lib/bsm";
 import { MANUAL_LEAGUES } from "../../lib/config";
 import type { Match } from "../../lib/bsm";
 
+// Type for minimal match payload (OPTION 5: trim unnecessary fields)
+type MinimalMatch = Pick<Match, 'id' | 'time' | 'field'> & {
+  leagueName: string;
+  leagueId: string;
+};
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
     const discovered = await discoverLeagues();
@@ -15,9 +21,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const results = await Promise.allSettled(
       uniqueLeagues.map((league) =>
         fetchLeagueMatches(league.url).then((matches) => {
-          if (!matches) return [] as (Match & { leagueName: string; leagueId: string })[];
+          if (!matches) return [] as MinimalMatch[];
           return matches.map((m) => ({
-            ...m,
+            id: m.id,
+            time: m.time,
+            field: m.field,
             leagueName: league.name,
             leagueId: league.id,
           }));
@@ -27,7 +35,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const allMatches = results
       .filter((r) => r.status === "fulfilled")
-      .flatMap((r) => (r as PromiseFulfilledResult<any[]>).value);
+      .flatMap((r) => (r as PromiseFulfilledResult<MinimalMatch[]>).value);
 
     const seen = new Set<number>();
     const unique = allMatches.filter((m) => {
@@ -36,7 +44,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return true;
     });
 
-    res.setHeader("Cache-Control", "s-maxage=3600, stale-while-revalidate");
+    // OPTION 3: Extend cache control headers with stale-while-revalidate
+    res.setHeader("Cache-Control", "s-maxage=3600, stale-while-revalidate=86400");
     res.status(200).json(unique);
   } catch (err) {
     console.error(err);
