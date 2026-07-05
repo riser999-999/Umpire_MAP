@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { Match } from "../lib/bsm";
 import { parseDate } from "../lib/bsm";
@@ -24,22 +24,10 @@ interface Props {
   selectedDay: string;
 }
 
-async function geocodeField(field: NonNullable<Match["field"]>): Promise<{ lat: number; lng: number } | null> {
-  const q = `${field.street}, ${field.postal_code} ${field.city}, Deutschland`;
-  try {
-    const res = await fetch(`/api/geocode?q=${encodeURIComponent(q)}`);
-    if (!res.ok) return null;
-    return res.json();
-  } catch {
-    return null;
-  }
-}
-
 export default function MapView({ matches, selectedDay }: Props) {
   const mapRef = useRef<L.Map | null>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const markersLayerRef = useRef<L.LayerGroup | null>(null);
-  const [geocodingStatus, setGeocodingStatus] = useState<"idle" | "loading" | "done">("idle");
 
   // Initialize map once
   useEffect(() => {
@@ -98,79 +86,40 @@ export default function MapView({ matches, selectedDay }: Props) {
     const fieldGroups = Array.from(fieldMap.values());
 
     markersLayerRef.current.clearLayers();
-    if (fieldGroups.length === 0) return;
 
-    setGeocodingStatus("loading");
-
-    let cancelled = false;
-
-    (async () => {
-      // OPTION 1: Parallelize geocoding instead of sequential requests
-      const geocodePromises = fieldGroups.map((group) => geocodeField(group.field));
-      const geocodeResults = await Promise.all(geocodePromises);
-      
-      const coords: { group: FieldGroup; lat: number; lng: number }[] = [];
-      for (let i = 0; i < fieldGroups.length; i++) {
-        const result = geocodeResults[i];
-        if (result) {
-          coords.push({ group: fieldGroups[i], lat: result.lat, lng: result.lng });
-        }
+    const coords: { group: FieldGroup; lat: number; lng: number }[] = [];
+    for (const group of fieldGroups) {
+      const { lat, lng } = group.field;
+      if (typeof lat === "number" && typeof lng === "number") {
+        coords.push({ group, lat, lng });
       }
+    }
 
-      if (cancelled || !markersLayerRef.current || !mapRef.current) return;
+    for (const { group, lat, lng } of coords) {
+      const popupHtml = renderToStaticMarkup(
+        <MatchPopup
+          fieldName={group.field.name}
+          fieldAddress={`${group.field.street}, ${group.field.postal_code} ${group.field.city}`}
+          matches={group.matches}
+        />
+      );
 
-      markersLayerRef.current.clearLayers();
+      const marker = L.marker([lat, lng]);
+      marker.bindPopup(popupHtml, {
+        maxWidth: 360,
+        className: "umpire-popup",
+      });
+      markersLayerRef.current.addLayer(marker);
+    }
 
-      for (const { group, lat, lng } of coords) {
-        const popupHtml = renderToStaticMarkup(
-          <MatchPopup
-            fieldName={group.field.name}
-            fieldAddress={`${group.field.street}, ${group.field.postal_code} ${group.field.city}`}
-            matches={group.matches}
-          />
-        );
-
-        const marker = L.marker([lat, lng]);
-        marker.bindPopup(popupHtml, {
-          maxWidth: 360,
-          className: "umpire-popup",
-        });
-        markersLayerRef.current.addLayer(marker);
-      }
-
-      if (coords.length > 0) {
-        const bounds = L.latLngBounds(coords.map(({ lat, lng }) => [lat, lng] as [number, number]));
-        mapRef.current.fitBounds(bounds, { padding: [50, 50], maxZoom: 12 });
-      }
-
-      setGeocodingStatus("done");
-    })();
-
-    return () => {
-      cancelled = true;
-    };
+    if (coords.length > 0) {
+      const bounds = L.latLngBounds(coords.map(({ lat, lng }) => [lat, lng] as [number, number]));
+      mapRef.current.fitBounds(bounds, { padding: [50, 50], maxZoom: 12 });
+    }
   }, [matches, selectedDay]);
 
   return (
     <div style={{ position: "relative", flex: 1, display: "flex", flexDirection: "column" }}>
-      {geocodingStatus === "loading" && (
-        <div style={{
-          position: "absolute",
-          top: "12px",
-          left: "50%",
-          transform: "translateX(-50%)",
-          zIndex: 1000,
-          backgroundColor: "#1e293b",
-          color: "#94a3b8",
-          padding: "8px 16px",
-          borderRadius: "8px",
-          fontSize: "13px",
-          border: "1px solid #334155",
-          pointerEvents: "none",
-        }}>
-          Spielorte werden gesucht...
-        </div>
-      )}
       <div ref={mapContainerRef} style={{ flex: 1, minHeight: "400px" }} />
       <style>{`
         .umpire-popup .leaflet-popup-content-wrapper {
