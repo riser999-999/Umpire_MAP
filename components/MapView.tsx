@@ -35,6 +35,10 @@ async function geocodeField(field: NonNullable<Match["field"]>): Promise<{ lat: 
   }
 }
 
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export default function MapView({ matches, selectedDay }: Props) {
   const mapRef = useRef<L.Map | null>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -105,15 +109,15 @@ export default function MapView({ matches, selectedDay }: Props) {
     let cancelled = false;
 
     (async () => {
-      // OPTION 1: Parallelize geocoding instead of sequential requests
-      const geocodePromises = fieldGroups.map((group) => geocodeField(group.field));
-      const geocodeResults = await Promise.all(geocodePromises);
-      
       const coords: { group: FieldGroup; lat: number; lng: number }[] = [];
+
       for (let i = 0; i < fieldGroups.length; i++) {
-        const result = geocodeResults[i];
+        if (cancelled) return;
+        if (i > 0) await sleep(200);
+        const group = fieldGroups[i];
+        const result = await geocodeField(group.field);
         if (result) {
-          coords.push({ group: fieldGroups[i], lat: result.lat, lng: result.lng });
+          coords.push({ group, lat: result.lat, lng: result.lng });
         }
       }
 

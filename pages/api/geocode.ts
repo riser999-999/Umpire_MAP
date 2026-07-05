@@ -21,8 +21,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const result = { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
     setCoords(q, result);
 
-    // OPTION 3: Extend cache control headers with stale-while-revalidate
-    res.setHeader("Cache-Control", "s-maxage=86400, stale-while-revalidate=604800");
+    res.setHeader("Cache-Control", "s-maxage=86400");
     res.status(200).json(result);
   } catch (err) {
     console.error("Geocoding error:", err);
