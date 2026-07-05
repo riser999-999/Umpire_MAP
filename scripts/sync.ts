@@ -94,7 +94,17 @@ async function main() {
   }
 
   // 5) Spiele speichern, mit venue_id verknuepft
-  const rows = allMatches.map((m) => {
+  // Ein Match kann in mehreren Liga-Gruppen auftauchen (z.B. Interleague/Playoffs) -
+  // dedupe by id, sonst schlaegt der Upsert mit "ON CONFLICT DO UPDATE command
+  // cannot affect row a second time" fehl.
+  const seen = new Set<number>();
+  const uniqueMatches = allMatches.filter((m) => {
+    if (seen.has(m.id)) return false;
+    seen.add(m.id);
+    return true;
+  });
+
+  const rows = uniqueMatches.map((m) => {
     const key = addressKey(m.field);
     const venue = key ? venueMap.get(key) : null;
     return {
