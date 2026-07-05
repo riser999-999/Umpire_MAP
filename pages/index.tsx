@@ -21,9 +21,25 @@ function getDayKey(dateStr: string): string {
 
 function selectDefaultDay(days: string[]): string | null {
   if (!days.length) return null;
+  
+  // Get current date in Europe/Berlin timezone
+  const nowBerlin = new Date().toLocaleDateString("de-DE", {
+    timeZone: "Europe/Berlin",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+  
+  // Find today's matches
+  const todayMatches = days.filter((d) => getDayKey(d) === nowBerlin);
+  if (todayMatches.length) return todayMatches[0];
+  
+  // If no today, find future matches
   const now = new Date();
   const future = days.filter((d) => parseDate(d) >= now);
   if (future.length) return future[0];
+  
+  // Otherwise return the last day
   return days[days.length - 1];
 }
 
