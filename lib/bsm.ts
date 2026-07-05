@@ -29,6 +29,8 @@ export interface Match {
     street: string;
     postal_code: string;
     city: string;
+    lat?: number | null;
+    lng?: number | null;
   };
   league: {
     name: string;

@@ -1,54 +1,35 @@
 import type { NextApiRequest, NextApiResponse } from "next";
-import { discoverLeagues, fetchLeagueMatches } from "../../lib/bsm";
-import { MANUAL_LEAGUES } from "../../lib/config";
-import type { Match } from "../../lib/bsm";
+import { createClient } from "@supabase/supabase-js";
 
-// Type for minimal match payload (OPTION 5: trim unnecessary fields)
-type MinimalMatch = Pick<Match, 'id' | 'time' | 'field'> & {
-  leagueName: string;
-  leagueId: string;
-};
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  try {
-    const discovered = await discoverLeagues();
-    const allLeagues = [
-      ...discovered,
-      ...MANUAL_LEAGUES.map((l) => ({ ...l, acronym: l.id, classification: "" })),
-    ];
-    const uniqueLeagues = Array.from(new Map(allLeagues.map((l) => [l.url, l])).values());
+  const { data, error } = await supabase
+    .from("matches")
+    .select(`
+      id,
+      time,
+      home_team_name,
+      away_team_name,
+      leagueId:league_id,
+      leagueName:league_name,
+      field:venues(name, street, postal_code, city, lat, lng)
+    `)
+    .order("time", { ascending: true });
 
-    const results = await Promise.allSettled(
-      uniqueLeagues.map((league) =>
-        fetchLeagueMatches(league.url).then((matches) => {
-          if (!matches) return [] as MinimalMatch[];
-          return matches.map((m) => ({
-            id: m.id,
-            time: m.time,
-            field: m.field,
-            leagueName: league.name,
-            leagueId: league.id,
-          }));
-        })
-      )
-    );
-
-    const allMatches = results
-      .filter((r) => r.status === "fulfilled")
-      .flatMap((r) => (r as PromiseFulfilledResult<MinimalMatch[]>).value);
-
-    const seen = new Set<number>();
-    const unique = allMatches.filter((m) => {
-      if (seen.has(m.id)) return false;
-      seen.add(m.id);
-      return true;
-    });
-
-    // OPTION 3: Extend cache control headers with stale-while-revalidate
-    res.setHeader("Cache-Control", "s-maxage=3600, stale-while-revalidate=86400");
-    res.status(200).json(unique);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Fehler beim Laden der Spiele" });
+  if (error) {
+    console.error(error);
+    return res.status(500).json({ error: "Fehler beim Laden der Spiele" });
   }
+
+  const normalized = (data ?? []).map((m: any) => ({
+    ...m,
+    field: Array.isArray(m.field) ? m.field[0] ?? null : m.field,
+  }));
+
+  res.setHeader("Cache-Control", "s-maxage=60, stale-while-revalidate=300");
+  res.status(200).json(normalized);
 }
