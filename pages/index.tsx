@@ -1,13 +1,20 @@
-import React, { useEffect, useState } from "react";
+import React, { useMemo, useState } from "react";
+import type { GetStaticProps } from "next";
 import dynamic from "next/dynamic";
 import Head from "next/head";
-import type { Match } from "../lib/bsm";
 import { parseDate } from "../lib/bsm";
+import { fetchMatchesFromSupabase, type MatchWithLeague } from "../lib/matches";
 import DaySelector from "../components/DaySelector";
 
 const MapView = dynamic(() => import("../components/MapView"), { ssr: false });
 
-type MatchWithLeague = Match & { leagueName: string; leagueId: string };
+export const getStaticProps: GetStaticProps<{ initialMatches: MatchWithLeague[] }> = async () => {
+  const initialMatches = await fetchMatchesFromSupabase();
+  return {
+    props: { initialMatches },
+    revalidate: 60,
+  };
+};
 
 function getDayKey(dateStr: string): string {
   const d = parseDate(dateStr);
@@ -17,6 +24,33 @@ function getDayKey(dateStr: string): string {
     month: "2-digit",
     day: "2-digit",
   });
+}
+
+// Single pass over matches: groups by calendar day (Europe/Berlin) and counts
+// per day, instead of re-scanning the full match list once per render.
+function groupByDay(matches: MatchWithLeague[]): {
+  sortedDays: string[];
+  matchCountByDay: Record<string, number>;
+} {
+  const repByKey = new Map<string, string>();
+  const countByKey = new Map<string, number>();
+
+  for (const m of matches) {
+    const key = getDayKey(m.time);
+    if (!repByKey.has(key)) repByKey.set(key, m.time);
+    countByKey.set(key, (countByKey.get(key) ?? 0) + 1);
+  }
+
+  const sortedDays = Array.from(repByKey.values()).sort(
+    (a, b) => parseDate(a).getTime() - parseDate(b).getTime()
+  );
+
+  const matchCountByDay: Record<string, number> = {};
+  Array.from(repByKey.entries()).forEach(([key, rep]) => {
+    matchCountByDay[rep] = countByKey.get(key) ?? 0;
+  });
+
+  return { sortedDays, matchCountByDay };
 }
 
 function selectDefaultDay(days: string[]): string | null {
@@ -43,60 +77,14 @@ function selectDefaultDay(days: string[]): string | null {
   return days[days.length - 1];
 }
 
-export default function HomePage() {
-  const [matches, setMatches] = useState<MatchWithLeague[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [selectedDay, setSelectedDay] = useState<string | null>(null);
+interface HomePageProps {
+  initialMatches: MatchWithLeague[];
+}
 
-  useEffect(() => {
-    fetch("/api/matches")
-      .then((r) => {
-        if (!r.ok) throw new Error("API error");
-        return r.json();
-      })
-      .then((data: MatchWithLeague[]) => {
-        setMatches(data);
-        setLoading(false);
-
-        // Build sorted unique days
-        const dayMap = new Map<string, string>();
-        for (const m of data) {
-          const key = getDayKey(m.time);
-          if (!dayMap.has(key)) dayMap.set(key, m.time);
-        }
-        const sortedDays = Array.from(dayMap.entries())
-          .sort(([, a], [, b]) => parseDate(a).getTime() - parseDate(b).getTime())
-          .map(([, time]) => time);
-
-        const defaultDay = selectDefaultDay(sortedDays);
-        setSelectedDay(defaultDay);
-      })
-      .catch((err) => {
-        console.error(err);
-        setError("Fehler beim Laden der Spieldaten. Bitte später erneut versuchen.");
-        setLoading(false);
-      });
-  }, []);
-
-  // Sorted unique days (representative time per day key)
-  const sortedDays: string[] = (() => {
-    const dayMap = new Map<string, string>();
-    for (const m of matches) {
-      const key = getDayKey(m.time);
-      if (!dayMap.has(key)) dayMap.set(key, m.time);
-    }
-    return Array.from(dayMap.entries())
-      .sort(([, a], [, b]) => parseDate(a).getTime() - parseDate(b).getTime())
-      .map(([, time]) => time);
-  })();
-
-  const matchCountByDay: Record<string, number> = {};
-  for (const m of matches) {
-    const key = getDayKey(m.time);
-    const dayRep = sortedDays.find((d) => getDayKey(d) === key);
-    if (dayRep) matchCountByDay[dayRep] = (matchCountByDay[dayRep] ?? 0) + 1;
-  }
+export default function HomePage({ initialMatches }: HomePageProps) {
+  const [matches] = useState<MatchWithLeague[]>(initialMatches);
+  const { sortedDays, matchCountByDay } = useMemo(() => groupByDay(matches), [matches]);
+  const [selectedDay, setSelectedDay] = useState<string | null>(() => selectDefaultDay(sortedDays));
 
   return (
     <>
@@ -127,7 +115,7 @@ export default function HomePage() {
         </header>
 
         {/* Day Selector */}
-        {!loading && !error && sortedDays.length > 0 && (
+        {sortedDays.length > 0 && (
           <DaySelector
             days={sortedDays}
             selectedDay={selectedDay}
@@ -138,35 +126,7 @@ export default function HomePage() {
 
         {/* Main content */}
         <main style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-          {loading && (
-            <div style={{
-              flex: 1,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              color: "#64748b",
-              fontSize: "15px",
-            }}>
-              Lade Spiele...
-            </div>
-          )}
-
-          {error && (
-            <div style={{
-              flex: 1,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              padding: "20px",
-              textAlign: "center",
-              color: "#ef4444",
-              fontSize: "14px",
-            }}>
-              {error}
-            </div>
-          )}
-
-          {!loading && !error && !selectedDay && (
+          {!selectedDay && (
             <div style={{
               flex: 1,
               display: "flex",
@@ -179,7 +139,7 @@ export default function HomePage() {
             </div>
           )}
 
-          {!loading && !error && selectedDay && (
+          {selectedDay && (
             <MapView matches={matches} selectedDay={selectedDay} />
           )}
         </main>
