@@ -60,6 +60,21 @@ export function parseDate(dateStr: string): Date {
   return new Date(normalized);
 }
 
+// Shared formatter instance: constructing an Intl.DateTimeFormat is much
+// more expensive than calling .format() on an existing one, and
+// toLocaleDateString(...) re-resolves a fresh formatter on every call.
+const dayKeyFormatter = new Intl.DateTimeFormat("de-DE", {
+  timeZone: "Europe/Berlin",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
+// Calendar-day key (Europe/Berlin) for grouping/comparing matches by day.
+export function dayKey(date: Date): string {
+  return dayKeyFormatter.format(date);
+}
+
 export async function discoverLeagues(): Promise<{ id: string; name: string; url: string; acronym: string; classification: string }[]> {
   if (!API_KEY) {
     console.error("BSM_API_KEY is not set!");

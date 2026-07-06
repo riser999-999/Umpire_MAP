@@ -1,8 +1,8 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import Head from "next/head";
 import type { Match } from "../lib/bsm";
-import { parseDate } from "../lib/bsm";
+import { parseDate, dayKey } from "../lib/bsm";
 import DaySelector from "../components/DaySelector";
 
 const MapView = dynamic(() => import("../components/MapView"), { ssr: false });
@@ -10,13 +10,7 @@ const MapView = dynamic(() => import("../components/MapView"), { ssr: false });
 type MatchWithLeague = Match & { leagueName: string; leagueId: string };
 
 function getDayKey(dateStr: string): string {
-  const d = parseDate(dateStr);
-  return d.toLocaleDateString("de-DE", {
-    timeZone: "Europe/Berlin",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  });
+  return dayKey(parseDate(dateStr));
 }
 
 function selectDefaultDay(days: string[]): string | null {
@@ -79,24 +73,26 @@ export default function HomePage() {
       });
   }, []);
 
-  // Sorted unique days (representative time per day key)
-  const sortedDays: string[] = (() => {
-    const dayMap = new Map<string, string>();
+  // Sorted unique days (representative time per day key) and match counts,
+  // computed in a single pass over `matches` and only recomputed when the
+  // match list itself changes (not on every day-selection re-render).
+  const { sortedDays, matchCountByDay } = useMemo(() => {
+    const dayRepByKey = new Map<string, string>();
+    const countByKey = new Map<string, number>();
     for (const m of matches) {
       const key = getDayKey(m.time);
-      if (!dayMap.has(key)) dayMap.set(key, m.time);
+      if (!dayRepByKey.has(key)) dayRepByKey.set(key, m.time);
+      countByKey.set(key, (countByKey.get(key) ?? 0) + 1);
     }
-    return Array.from(dayMap.entries())
+    const sortedDays = Array.from(dayRepByKey.entries())
       .sort(([, a], [, b]) => parseDate(a).getTime() - parseDate(b).getTime())
       .map(([, time]) => time);
-  })();
-
-  const matchCountByDay: Record<string, number> = {};
-  for (const m of matches) {
-    const key = getDayKey(m.time);
-    const dayRep = sortedDays.find((d) => getDayKey(d) === key);
-    if (dayRep) matchCountByDay[dayRep] = (matchCountByDay[dayRep] ?? 0) + 1;
-  }
+    const matchCountByDay: Record<string, number> = {};
+    dayRepByKey.forEach((rep, key) => {
+      matchCountByDay[rep] = countByKey.get(key) ?? 0;
+    });
+    return { sortedDays, matchCountByDay };
+  }, [matches]);
 
   return (
     <>

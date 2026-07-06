@@ -1,7 +1,7 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useMemo, useRef } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { Match } from "../lib/bsm";
-import { parseDate } from "../lib/bsm";
+import { parseDate, dayKey } from "../lib/bsm";
 import MatchPopup from "./MatchPopup";
 
 // Leaflet icon fix for Next.js
@@ -52,25 +52,24 @@ export default function MapView({ matches, selectedDay }: Props) {
     };
   }, []);
 
-  // Update markers when matches or selected day changes
+  // Group all matches by day key once; only recomputed when `matches` changes,
+  // not on every day switch.
+  const matchesByDay = useMemo(() => {
+    const map = new Map<string, (Match & { leagueName: string; leagueId: string })[]>();
+    for (const m of matches) {
+      const key = dayKey(parseDate(m.time));
+      const list = map.get(key);
+      if (list) list.push(m);
+      else map.set(key, [m]);
+    }
+    return map;
+  }, [matches]);
+
+  // Update markers when the grouped matches or selected day changes
   useEffect(() => {
     if (!mapRef.current || !markersLayerRef.current) return;
 
-    const dayMatches = matches.filter((m) => {
-      const d = parseDate(m.time).toLocaleDateString("de-DE", {
-        timeZone: "Europe/Berlin",
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-      });
-      const sel = parseDate(selectedDay).toLocaleDateString("de-DE", {
-        timeZone: "Europe/Berlin",
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-      });
-      return d === sel;
-    });
+    const dayMatches = matchesByDay.get(dayKey(parseDate(selectedDay))) ?? [];
 
     // Group by field key
     const fieldMap = new Map<string, FieldGroup>();
@@ -116,7 +115,7 @@ export default function MapView({ matches, selectedDay }: Props) {
       const bounds = L.latLngBounds(coords.map(({ lat, lng }) => [lat, lng] as [number, number]));
       mapRef.current.fitBounds(bounds, { padding: [50, 50], maxZoom: 12 });
     }
-  }, [matches, selectedDay]);
+  }, [matchesByDay, selectedDay]);
 
   return (
     <div style={{ position: "relative", flex: 1, display: "flex", flexDirection: "column" }}>
