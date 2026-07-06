@@ -73,7 +73,7 @@ export default function MatchPopup({ fieldName, fieldAddress, matches }: Props) 
               backgroundColor: "#1e3a5f",
               color: "#93c5fd",
             }}>
-              {match.league.acronym || match.league.name}
+              {match.league.name || match.league.acronym}
             </span>
             <span style={{
               fontSize: "11px",
