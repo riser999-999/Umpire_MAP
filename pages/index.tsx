@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import Head from "next/head";
 import type { Match } from "../lib/bsm";
-import { parseDate, dayKey } from "../lib/bsm";
+import { parseDate, dayKey, formatDate, formatTime } from "../lib/bsm";
 import DaySelector from "../components/DaySelector";
 
 const MapView = dynamic(() => import("../components/MapView"), { ssr: false });
@@ -42,11 +42,14 @@ export default function HomePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/matches")
       .then((r) => {
         if (!r.ok) throw new Error("API error");
+        const headerValue = r.headers.get("X-Last-Updated");
+        if (headerValue) setLastUpdated(headerValue);
         return r.json();
       })
       .then((data: MatchWithLeague[]) => {
@@ -120,6 +123,11 @@ export default function HomePage() {
           <p style={{ fontSize: "12px", color: "#64748b", marginTop: "2px" }}>
             Spielorte Saison 2026
           </p>
+          {lastUpdated && (
+            <p style={{ fontSize: "12px", color: "#64748b", marginTop: "2px" }}>
+              Aktualisiert: {formatDate(lastUpdated)} {formatTime(lastUpdated)} Uhr
+            </p>
+          )}
         </header>
 
         {/* Day Selector */}
